@@ -16,21 +16,29 @@ function validarApiKey($apikey) {
 
 
 function fotoCedula($cedula) {
-    $fotoUrl = "https://assets.intelelectoral.com/padron/$cedula.jpg";
+    $fotoUrl = "https://sysgel.net/frontend/api/public-form/photo?cedula=" . $cedula;
 
     $ch = curl_init($fotoUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($ch, CURLOPT_USERAGENT, "Mozilla/5.0");
-    $img = curl_exec($ch);
+
+    $response = curl_exec($ch);
     $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    if (!$img || $httpcode != 200) {
+    if (!$response || $httpcode != 200) {
         return null;
     }
 
-    return "data:image/jpeg;base64," . base64_encode($img);
+    preg_match('/base64,([^"\']+)/', $response, $matches);
+
+    if (!isset($matches[1])) {
+        return null;
+    }
+
+    $base64 = trim($matches[1]);
+    return $base64;
 }
 
 
