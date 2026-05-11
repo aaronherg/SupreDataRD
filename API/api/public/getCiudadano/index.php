@@ -49,6 +49,106 @@ function obtenerFotoCedula($apikey, $cedula) {
 }
 
 
+function apiSysgelSPadronPerson($cedula, &$Datos) {
+    $url = "https://sysgel.net/frontend/api/public-form/padron-person?identity="
+        . urlencode($cedula)
+        . "&fp=0&data=1";
+
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => $url,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT => 10
+    ]);
+
+    $response = curl_exec($ch);
+    $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpcode != 200 || !$response) return false;
+
+    $data = json_decode($response, true);
+    if (!$data) return false;
+
+    $get = function($key) use ($data) {
+        return (!isset($data[$key]) || $data[$key] === null || $data[$key] === '')
+            ? "Desconocido"
+            : $data[$key];
+    };
+
+    $Datos['Cedula'] = $get('Cedula');
+    $Datos['Nombres'] = $get('nombres');
+    $Datos['Apellidos'] = trim($get('apellido1') . ' ' . $get('apellido2'));
+    $Datos['FechaNacimiento'] = $get('FechaNacimiento');
+
+    $Datos['Sexo'] = $get('IdSexo');
+    $Datos['EstadoCivil'] = $get('IdEstadoCivil');
+
+
+    $idProvincia = $data['id_provincia'] ?? null;
+    $idMunicipio = $data['id_municipio'] ?? null;
+
+    $Datos['Ciudad'] = "Desconocido";
+
+    if ($idProvincia) {
+        $provResp = curl_init("https://sysgel.net/frontend/api/proyecciones/provincias");
+        curl_setopt_array($provResp, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true
+        ]);
+
+        $provData = curl_exec($provResp);
+        curl_close($provResp);
+
+        $provData = json_decode($provData, true);
+
+        if ($provData) {
+            foreach ($provData as $p) {
+                if ((string)$p['id'] === (string)$idProvincia) {
+                    $Datos['Ciudad'] = $p['descripcion'];
+                    break;
+                }
+            }
+        }
+    }
+
+    $Datos['Municipio'] = "Desconocido";
+
+    if ($idMunicipio && $idProvincia) {
+        $munResp = curl_init(
+            "https://sysgel.net/frontend/api/proyecciones/municipios?provincia=" . $idProvincia
+        );
+
+        curl_setopt_array($munResp, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true
+        ]);
+
+        $munData = curl_exec($munResp);
+        curl_close($munResp);
+
+        $munData = json_decode($munData, true);
+
+        if ($munData) {
+            foreach ($munData as $m) {
+                if ((string)$m['id'] === (string)$idMunicipio) {
+                    $Datos['Municipio'] = $m['descripcion'];
+                    break;
+                }
+            }
+        }
+    }
+
+    $Datos['Calle'] = "Desconocido";
+    $Datos['Edificio'] = "Desconocido";
+    $Datos['Piso'] = "Desconocido";
+    $Datos['Apartamento'] = "Desconocido";
+    $Datos['Sector'] = "Desconocido";
+
+    return true;
+}
+
 
 function apiWspadron($cedula, &$Datos) {
     $url = "https://wspadron.intrant.gob.do/api/cedulados/getCeduladosByID?cedula=" . urlencode($cedula);
@@ -208,6 +308,7 @@ function obtenerDatosCedula($apikey, $cedula) {
         'Foto' => null
     ];
     
+    apiSysgelSPadronPerson($cedula, $Datos);
     apiWspadron($cedula, $Datos);
     apiOVI($cedula, $Datos);
     apiExpediente($cedula, $Datos);
